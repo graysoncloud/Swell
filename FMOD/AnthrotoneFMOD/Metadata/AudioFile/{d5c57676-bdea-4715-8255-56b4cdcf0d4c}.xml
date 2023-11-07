@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{d5c57676-bdea-4715-8255-56b4cdcf0d4c}">
+		<property name="assetPath">
+			<value>Whole Tracks/Naru, Embracing the Light (Ori).wav</value>
+		</property>
+		<property name="isStreaming">
+			<value>true</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>48</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>84.077687499999996</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{c572ab20-600a-417c-92da-141cf8dd6bbe}</destination>
+		</relationship>
+	</object>
+</objects>

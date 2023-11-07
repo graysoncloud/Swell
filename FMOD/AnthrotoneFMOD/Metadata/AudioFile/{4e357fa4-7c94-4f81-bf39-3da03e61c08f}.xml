@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{4e357fa4-7c94-4f81-bf39-3da03e61c08f}">
+		<property name="assetPath">
+			<value>Whole Tracks/Says (Nils Frahm).wav</value>
+		</property>
+		<property name="isStreaming">
+			<value>true</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>48</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>499.12454166666669</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{c572ab20-600a-417c-92da-141cf8dd6bbe}</destination>
+		</relationship>
+	</object>
+</objects>

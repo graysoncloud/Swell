@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{9750e5e7-6a19-49b5-a45e-d66247d11dd4}">
+		<property name="assetPath">
+			<value>Whole Tracks/Doria (Olafur Arnalds).wav</value>
+		</property>
+		<property name="isStreaming">
+			<value>true</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>48</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>202.46639583333334</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{c572ab20-600a-417c-92da-141cf8dd6bbe}</destination>
+		</relationship>
+	</object>
+</objects>
