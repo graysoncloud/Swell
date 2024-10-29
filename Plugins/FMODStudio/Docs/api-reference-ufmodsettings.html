@@ -13,15 +13,17 @@
 <li><a href="user-guide.html">User Guide</a></li>
 <li><a href="settings.html">Settings</a></li>
 <li><a href="plugins.html">Plugins</a></li>
+<li><a href="niagara.html">Niagara Integration</a></li>
 <li class="manual-current-chapter manual-inactive-chapter"><a href="api-reference.html">API Reference</a><ul class="subchapters"><li><a href="api-reference-common.html">Common</a></li><li><a href="api-reference-ifmodstudiomodule.html">IFMODStudioModule</a></li><li><a href="api-reference-ufmodblueprintstatics.html">UFMODBlueprintStatics</a></li><li><a href="api-reference-ufmodaudiocomponent.html">UFMODAudioComponent</a></li><li><a href="api-reference-afmodambientsound.html">AFMODAmbientSound</a></li><li><a href="api-reference-ufmodanimnotifyplay.html">UFMODAnimNotifyPlay</a></li><li><a href="api-reference-ufmodbank.html">UFMODBank</a></li><li><a href="api-reference-ufmodbus.html">UFMODBus</a></li><li><a href="api-reference-ufmodvca.html">UFMODVCA</a></li><li><a href="api-reference-ufmodevent.html">UFMODEvent</a></li><li><a href="api-reference-ufmodport.html">UFMODPort</a></li><li><a href="api-reference-ufmodsnapshot.html">UFMODSnapshot</a></li><li><a href="api-reference-ufmodsnapshotreverb.html">UFMODSnapshotReverb</a></li><li><a href="api-reference-ufmodasset.html">UFMODAsset</a></li><li class="manual-current-chapter manual-active-chapter"><a href="api-reference-ufmodsettings.html">UFMODSettings</a></li></ul></li>
 <li><a href="blueprint-reference.html">Blueprint Reference</a></li>
 <li><a href="platform-specifics.html">Platform Specifics</a></li>
 <li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="audiolink.html">AudioLink</a></li>
 <li><a href="glossary.html">Glossary</a></li>
 </ul>
 </div>
 <div class="manual-content api">
-<h1>5. API Reference | UFMODSettings</h1>
+<h1>6. API Reference | UFMODSettings</h1>
 <p>This class inherits from <a href="">UObject</a>.</p>
 <p><strong>Defines:</strong></p>
 <ul>
@@ -46,8 +48,7 @@
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_outputformat" title="Project output format, should match the mode set up for the Studio project.">UFMODSettings::OutputFormat</a> Project output format, should match the mode set up for the Studio project.</span></li>
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_outputtype" title="Built-in output types that can be used to run the mixer.">UFMODSettings::OutputType</a> Built-in output types that can be used to run the mixer.</span></li>
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_locales" title="Locales for localized banks. These should match the project locales configured in the FMOD Studio project.">UFMODSettings::Locales</a> Locales for localized banks. These should match the project locales configured in the FMOD Studio project.</span></li>
-<li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_bvol0virtual" title="Enable vol0virtual, which means voices with low volume will automatically go virtual to save CPU.">UFMODSettings::bVol0Virtual</a> Enable vol0virtual, which means voices with low volume will automatically go virtual to save CPU.</span></li>
-<li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_vol0virtuallevel" title="If vol0virtual is enabled, the signal level at which to make channels virtual.">UFMODSettings::Vol0VirtualLevel</a> If vol0virtual is enabled, the signal level at which to make channels virtual.</span></li>
+<li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_vol0virtuallevel" title="The signal level at which to make channels virtual.">UFMODSettings::Vol0VirtualLevel</a> The signal level at which to make channels virtual.</span></li>
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_samplerate" title="Sample rate to use, or 0 to match system rate.eg. 0, 22050, 24000, 32000, 44100, 48000.">UFMODSettings::SampleRate</a> Sample rate to use, or 0 to match system rate.eg. 0, 22050, 24000, 32000, 44100, 48000.</span></li>
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_bmatchhardwaresamplerate" title="Match hardware sample rate where reasonable (44.1kHz to 48kHz).">UFMODSettings::bMatchHardwareSampleRate</a> Match hardware sample rate where reasonable (44.1kHz to 48kHz).</span></li>
 <li><span><a class="apilink" href="api-reference-ufmodsettings.html#ufmodsettings_realchannelcount" title="Number of actual software voices that can be used at once.">UFMODSettings::RealChannelCount</a> Number of actual software voices that can be used at once.</span></li>
@@ -463,18 +464,8 @@ FMOD may become unstable if the limit is exceeded!</dd>
 <div class="highlight language-cpp"><pre><span></span><span class="n">TArray</span><span class="o">&lt;</span><span class="n">FFMODProjectLocale</span><span class="o">&gt;</span> <span class="n">Locales</span><span class="p">;</span>
 </pre></div>
 
-<h2 api="property" id="ufmodsettings_bvol0virtual"><a href="#ufmodsettings_bvol0virtual">UFMODSettings::bVol0Virtual</a></h2>
-<p>Enable vol0virtual, which means voices with low volume will automatically go virtual to save CPU.</p>
-<p>
-<div class="language-selector">
-<div class="language-tab" data-language="language-cpp">C++</div>
-</div>
-</p>
-<div class="highlight language-cpp"><pre><span></span><span class="kt">bool</span> <span class="n">bVol0Virtual</span><span class="p">;</span>
-</pre></div>
-
 <h2 api="property" id="ufmodsettings_vol0virtuallevel"><a href="#ufmodsettings_vol0virtuallevel">UFMODSettings::Vol0VirtualLevel</a></h2>
-<p>If vol0virtual is enabled, the signal level at which to make channels virtual.</p>
+<p>The signal level at which to make channels virtual.</p>
 <p>
 <div class="language-selector">
 <div class="language-tab" data-language="language-cpp">C++</div>
@@ -757,7 +748,7 @@ FMOD may become unstable if the limit is exceeded!</dd>
 <div class="highlight language-cpp"><pre><span></span><span class="n">TMap</span><span class="o">&lt;</span><span class="n">TEnumAsByte</span><span class="o">&lt;</span><span class="n">EFMODPlatforms</span><span class="o">::</span><span class="n">Type</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">FFMODPlatformSettings</span><span class="o">&gt;</span> <span class="n">Platforms</span><span class="p">;</span>
 </pre></div></div>
 
-<p class="manual-footer">Unreal Integration 2.02.17 (2023-08-21). &copy; 2023 Firelight Technologies Pty Ltd.</p>
+<p class="manual-footer">Unreal Integration 2.02.24 (2024-09-23). &copy; 2024 Firelight Technologies Pty Ltd.</p>
 </body>
 </html>
 
