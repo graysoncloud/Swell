@@ -30,6 +30,10 @@
 		{
 			"Name": "FMODStudioNiagara",
 			"Enabled": true
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true
 		}
 	]
 }
