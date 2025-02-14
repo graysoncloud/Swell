@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="Workspace" id="{ac7385f5-e173-44f5-8671-ef295c55d97c}">
+		<relationship name="projectSettings">
+			<destination>{a1468b5f-38ee-47ab-b11d-537008aa4c01}</destination>
+		</relationship>
+		<relationship name="changelist">
+			<destination>{9c0abf16-4aee-43b9-888f-517cfd31bb8a}</destination>
+		</relationship>
+	</object>
+	<object class="ProjectSettings" id="{a1468b5f-38ee-47ab-b11d-537008aa4c01}">
+		<property name="openWindows">
+			<value>Event Editor 1</value>
+		</property>
+		<property name="windowLayout">
+			<value>AAAAAwAAABIAUwBhAG4AZABiAG8AeAAgADEAAABCAdnQywADAAD/////////+AAAB4AAAAQQAAACgAAAARgAAAafAAACkAAAAAACAAAAB4AAAAAAAAAAFwAAB38AAAQPAAAAIABQAHIAZQBzAGUAdAAgAEIAcgBvAHcAcwBlAHIAIAAxAAAAQgHZ0MsAAwAAAAAC9wAAAIEAAASIAAADcAAAAvgAAACgAAAEhwAAA28AAAAAAAAAAAeAAAAC+AAAAKAAAASHAAADbwAAABwARQB2AGUAbgB0ACAARQBkAGkAdABvAHIAIAAxAAAAQgHZ0MsAAwAA//////////gAAAeAAAAECAAAAoAAAAEYAAAGnwAAArsAAAAAAgAAAAeAAAAAAAAAABcAAAd/AAAEBw==</value>
+		</property>
+		<relationship name="activePlatform">
+			<destination>{774d1a34-7aa8-4e1b-a8b8-43bd3c9e8940}</destination>
+		</relationship>
+	</object>
+	<object class="WorkspaceChangelist" id="{9c0abf16-4aee-43b9-888f-517cfd31bb8a}" />
+</objects>
