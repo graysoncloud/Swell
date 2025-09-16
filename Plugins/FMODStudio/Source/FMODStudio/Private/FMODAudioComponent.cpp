@@ -1,4 +1,4 @@
-// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2023.
+// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2025.
 
 #include "FMODAudioComponent.h"
 #include "FMODStudioModule.h"
@@ -43,6 +43,9 @@ UFMODAudioComponent::UFMODAudioComponent(const FObjectInitializer &ObjectInitial
     , ProgrammerSound(nullptr)
     , NeedDestroyProgrammerSoundCallback(false)
     , EventLength(0)
+    , bPlayEnded(false)
+    , Velocity(ForceInit)
+    , LastLocation(ForceInit)
 {
     bAutoActivate = true;
     bNeverNeedsRenderUpdate = true;
@@ -160,7 +163,7 @@ void UFMODAudioComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTransfor
         attr.position = FMODUtils::ConvertWorldVector(GetComponentTransform().GetLocation());
         attr.up = FMODUtils::ConvertUnitVector(GetComponentTransform().GetUnitAxis(EAxis::Z));
         attr.forward = FMODUtils::ConvertUnitVector(GetComponentTransform().GetUnitAxis(EAxis::X));
-        attr.velocity = FMODUtils::ConvertWorldVector(GetOwner()->GetVelocity());
+        attr.velocity = FMODUtils::ConvertWorldVector(Velocity);
 
         StudioInstance->set3DAttributes(&attr);
 
@@ -185,7 +188,7 @@ void UFMODAudioComponent::UpdateInteriorVolumes()
 
     FInteriorSettings *Ambient =
         (FInteriorSettings *)alloca(sizeof(FInteriorSettings)); // FinteriorSetting::FInteriorSettings() isn't exposed (possible UE4 bug???)
-    const FVector &Location = GetOwner()->GetTransform().GetTranslation();
+    const FVector &Location = GetComponentLocation();
     AAudioVolume *AudioVolume = GetWorld()->GetAudioSettings(Location, NULL, Ambient);
 
     const FFMODListener &Listener = GetStudioModule().GetNearestListener(Location);
@@ -275,7 +278,7 @@ void UFMODAudioComponent::UpdateAttenuation()
         static FName NAME_SoundOcclusion = FName(TEXT("SoundOcclusion"));
         FCollisionQueryParams Params(NAME_SoundOcclusion, OcclusionDetails.bUseComplexCollisionForOcclusion, GetOwner());
 
-        const FVector &Location = GetOwner()->GetTransform().GetTranslation();
+        const FVector &Location = GetComponentLocation();
         const FFMODListener &Listener = GetStudioModule().GetNearestListener(Location);
 
         bool bIsOccluded = GWorld->LineTraceTestByChannel(Location, Listener.Transform.GetLocation(), OcclusionDetails.OcclusionTraceChannel, Params);
@@ -377,8 +380,19 @@ void UFMODAudioComponent::OnUnregister()
     Super::OnUnregister();
 }
 
+void UFMODAudioComponent::BeginPlay()
+{
+#if WITH_EDITOR
+    IFMODStudioModule::Get().PreEndPIEEvent().AddUObject(this, &UFMODAudioComponent::Shutdown);
+#endif
+    Super::BeginPlay();
+}
+
 void UFMODAudioComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+#if WITH_EDITOR
+    IFMODStudioModule::Get().PreEndPIEEvent().RemoveAll(this);
+#endif
     Super::EndPlay(EndPlayReason);
     bool shouldStop = false;
 
@@ -407,11 +421,23 @@ void UFMODAudioComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
         OnEventStopped.Broadcast();
     }
     Release();
+
+    bPlayEnded = true;
 }
 
 void UFMODAudioComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (DeltaTime > 0.f)
+    {
+        FVector pos = GetComponentTransform().GetTranslation();
+        if (LastLocation != FVector::ZeroVector)
+        {
+            Velocity = (pos - LastLocation) / DeltaTime;
+        }
+        LastLocation = pos;
+    }
 
     if (IsActive())
     {
@@ -506,7 +532,7 @@ void UFMODAudioComponent::Deactivate()
     Super::Deactivate();
 }
 
-FMOD_RESULT F_CALLBACK UFMODAudioComponent_EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters)
+FMOD_RESULT F_CALL UFMODAudioComponent_EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters)
 {
     UFMODAudioComponent *Component = nullptr;
     FMOD::Studio::EventInstance *Instance = (FMOD::Studio::EventInstance *)event;
@@ -546,7 +572,7 @@ void UFMODAudioComponent_ReleaseProgrammerSound(FMOD_STUDIO_PROGRAMMER_SOUND_PRO
     }
 }
 
-FMOD_RESULT F_CALLBACK UFMODAudioComponent_EventCallbackDestroyProgrammerSound(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters)
+FMOD_RESULT F_CALL UFMODAudioComponent_EventCallbackDestroyProgrammerSound(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters)
 {
     UFMODAudioComponent_ReleaseProgrammerSound((FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES *)parameters);
     return FMOD_OK;
@@ -709,7 +735,8 @@ void UFMODAudioComponent::PlayInternal(EFMODSystemContext::Type Context, bool bR
 {
     Stop();
 
-    if (!FMODUtils::IsWorldAudible(GetWorld(), Context == EFMODSystemContext::Editor))
+    if (!FMODUtils::IsWorldAudible(GetWorld(), Context == EFMODSystemContext::Editor
+        || Context == EFMODSystemContext::Auditioning))
     {
         return;
     }
@@ -802,6 +829,37 @@ void UFMODAudioComponent::PlayInternal(EFMODSystemContext::Type Context, bool bR
     }
 }
 
+void UFMODAudioComponent::PauseInternal(PauseContext Pauser)
+{
+    if (Pauser == Implicit)
+    {
+        bImplicitlyPaused = true;
+    }
+    if (Pauser == Explicit)
+    {
+        bExplicitlyPaused = true;
+    }
+
+    SetPaused(true);
+}
+
+void UFMODAudioComponent::ResumeInternal(PauseContext Pauser)
+{
+    if (GetPaused())
+    {
+        if (Pauser == Implicit)
+        {
+            bImplicitlyPaused = false;
+        }
+        if (Pauser == Explicit)
+        {
+            bExplicitlyPaused = false;
+        }
+
+        SetPaused(bImplicitlyPaused || bExplicitlyPaused);
+    }
+}
+
 void UFMODAudioComponent::Stop()
 {
     UE_LOG(LogFMOD, Verbose, TEXT("UFMODAudioComponent %p Stop"), this);
@@ -817,6 +875,14 @@ void UFMODAudioComponent::Release()
 {
     ReleaseEventInstance();
 }
+
+#if WITH_EDITOR
+void UFMODAudioComponent::Shutdown()
+{
+    Stop();
+    Release();
+}
+#endif
 
 void UFMODAudioComponent::ReleaseEventCache()
 {
@@ -915,6 +981,20 @@ void UFMODAudioComponent::SetPaused(bool Paused)
             UE_LOG(LogFMOD, Warning, TEXT("Failed to pause"));
         }
     }
+}
+
+bool UFMODAudioComponent::GetPaused()
+{
+    bool Paused = false;
+    if (StudioInstance)
+    {
+        FMOD_RESULT Result = StudioInstance->getPaused(&Paused);
+        if (Result != FMOD_OK)
+        {
+            UE_LOG(LogFMOD, Warning, TEXT("Failed to get paused state"));
+        }
+    }
+    return Paused;
 }
 
 void UFMODAudioComponent::SetParameter(FName Name, float Value)

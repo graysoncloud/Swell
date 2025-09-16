@@ -1,4 +1,4 @@
-// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2023.
+// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2025.
 
 #pragma once
 
@@ -139,7 +139,8 @@ class FMODSTUDIO_API UFMODAudioComponent : public USceneComponent
     GENERATED_UCLASS_BODY()
 
     friend struct FFMODEventControlExecutionToken;
-    friend FMOD_RESULT F_CALLBACK UFMODAudioComponent_EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters);
+    friend struct FPlayingToken;
+    friend FMOD_RESULT F_CALL UFMODAudioComponent_EventCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE *event, void *parameters);
 
 public:
     /** The event asset to use for this sound. */
@@ -223,6 +224,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Audio|FMOD|Components")
     void SetPaused(bool paused);
 
+    /** Get the paused state of the audio component. Returns false if internal getPaused query fails. */
+    UFUNCTION(BlueprintCallable, Category = "Audio|FMOD|Components")
+    bool GetPaused();
+
     /** Set a parameter of the Event. */
     UFUNCTION(BlueprintCallable, Category = "Audio|FMOD|Components")
     void SetParameter(FName Name, float Value);
@@ -279,35 +284,66 @@ public:
     /** Actual Studio instance handle. */
     FMOD::Studio::EventInstance *StudioInstance;
 
-// Begin UObject interface.
+    // Begin UObject interface.
 #if WITH_EDITOR
     virtual void PostEditChangeProperty(FPropertyChangedEvent &e) override;
 #endif // WITH_EDITOR
     virtual void PostLoad() override;
-// End UObject interface.
+    // End UObject interface.
 
-// Begin USceneComponent Interface
+    // Begin USceneComponent Interface
     virtual void Activate(bool bReset = false) override;
     virtual void Deactivate() override;
-// End USceneComponent Interface
+    /** Called when a component is registered, after Scene is set, but before CreateRenderState_Concurrent or OnCreatePhysicsState are called. */
+    virtual void OnRegister() override;
+    /** Called when a component is unregistered. Called after DestroyRenderState_Concurrent and OnDestroyPhysicsState are called. */
+    virtual void OnUnregister() override;
+    // End USceneComponent Interface
+
+    // Begin ActorComponent interface.
+    /** Overridable native event for when play begins for this actor. */
+    virtual void BeginPlay() override;
+    /** Overridable function called whenever this actor is being removed from a level. */
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    /** Function called every frame on this ActorComponent. Only executes if the component is registered, and also PrimaryComponentTick.bCanEverTick must be set to true. */
+    virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+    // End ActorComponent interface.
 
 protected:
-// Begin UObject interface.
+    // Begin UObject interface.
     virtual void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None) override;
-// End UObject interface.
+    // End UObject interface.
 
-// Begin USceneComponent Interface
+    // Begin USceneComponent Interface
     virtual FString GetDetailedInfoInternal() const override;
-// End USceneComponent Interface
+    // End USceneComponent Interface
 
 private:
     bool bDefaultParameterValuesCached;
+
+    enum PauseContext
+    {
+        Explicit,
+        Implicit
+    };
+
+    /** Used for pausing from sequencer. */
+    bool bImplicitlyPaused = false;
+
+    /** Used for pausing from a direct call to pause. */
+    bool bExplicitlyPaused = false;
 
     /** Stored properties to apply next time we create an instance. */
     float StoredProperties[EFMODEventProperty::Count];
 
     /** Internal play function which can play events in the editor. */
     void PlayInternal(EFMODSystemContext::Type Context, bool bReset = false);
+
+    /** Pause the audio component from a sequencer call. */
+    void PauseInternal(PauseContext Pauser);
+
+    /** Resume the audio component from a sequencer call. */
+    void ResumeInternal(PauseContext Pauser);
 
     /** Cache default event parameter values. */
     void CacheDefaultParameterValues();
@@ -342,22 +378,13 @@ private:
     void EventCallbackSoundStopped();
     bool TriggerSoundStoppedDelegate;
 
-// Begin ActorComponent interface.
-    /** Called when a component is registered, after Scene is set, but before CreateRenderState_Concurrent or OnCreatePhysicsState are called. */
-    virtual void OnRegister() override;
-
-    /** Called when a component is unregistered. Called after DestroyRenderState_Concurrent and OnDestroyPhysicsState are called. */
-    virtual void OnUnregister() override;
-
-    /** Overridable function called whenever this actor is being removed from a level. */
-    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
-    /** Function called every frame on this ActorComponent. Only executes if the component is registered, and also PrimaryComponentTick.bCanEverTick must be set to true. */
-    virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
-// End ActorComponent interface.
-
 #if WITH_EDITORONLY_DATA
     void UpdateSpriteTexture();
+#endif
+
+#if WITH_EDITOR
+    /** Function assigned to the FMODStudioModule PreShutdown delegate to clean up before the Studio System is released. */
+    void Shutdown();
 #endif
 
     /** Release any cached parameters then the Studio Instance. */
@@ -422,4 +449,10 @@ private:
     bool NeedDestroyProgrammerSoundCallback;
     /** The length of the current Event in milliseconds. */
     int32 EventLength;
+
+    /** To prevent restarting by delayed state restore from sequencer. */
+    bool bPlayEnded;
+
+    FVector Velocity;
+    FVector LastLocation;
 };

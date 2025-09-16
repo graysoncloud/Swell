@@ -7,7 +7,7 @@
 <body>
 <div class="docs-body">
 <div class="manual-toc">
-<p>Unreal Integration 2.02</p>
+<p>Unreal Integration 2.03</p>
 <ul>
 <li><a href="welcome.html">Welcome to FMOD for Unreal</a></li>
 <li><a href="user-guide.html">User Guide</a></li>
@@ -30,6 +30,7 @@
 <li><a href="#blueprint-only-projects">Blueprint only projects</a></li>
 <li><a href="#audio-not-muted-when-game-loses-focus">Audio not muted when game loses focus</a></li>
 <li><a href="#endplay-with-play-in-editor">EndPlay with Play-In-Editor</a></li>
+<li><a href="#cannot-find-events-or-buses-with-strings">Cannot Find Events or Buses with Strings</a></li>
 </ul>
 </li>
 <li><a href="audiolink.html">AudioLink</a></li>
@@ -91,7 +92,7 @@ This is mentioned by Epic on their forum: <a href="https://answers.unrealengine.
 </pre></div>
 
 <h2 id="endplay-with-play-in-editor"><a href="#endplay-with-play-in-editor">9.9 EndPlay with Play-In-Editor</a></h2>
-<p>Normally cleaning up in <code>EndPlay()</code> is valid and safe to do for your game, but during Play-In-Editor <code>EndPlay</code> doesn't get triggered until after the FMODStudio Module has already been shutdown. This isn't such an issue with <a href="https://fmod.com/docs/2.02/api/studio-api.html">Studio API</a>, as when the System gets released it cleans up all of it's managed handles. The issue is when using the <a href="https://fmod.com/docs/2.02/api/core-api.html">Core API</a> because you need to manage it's objects yourself.</p>
+<p>Normally cleaning up in <code>EndPlay()</code> is valid and safe to do for your game, but during Play-In-Editor <code>EndPlay</code> doesn't get triggered until after the FMODStudio Module has already been shutdown. This isn't such an issue with <a href="https://fmod.com/docs/2.03/api/studio-api.html">Studio API</a>, as when the System gets released it cleans up all of it's managed handles. The issue is when using the <a href="https://fmod.com/docs/2.03/api/core-api.html">Core API</a> because you need to manage it's objects yourself.</p>
 <p>We have a delegate that you can hook into, which will fire off a function before the FMOD System has been shutdown. You can access the delegate using <a href=""><code>IFMODStudioModule::Get().PreEndPIEEvent()</code></a>.</p>
 <p>Eg.</p>
 <div class="highlight language-text"><pre><span></span>void AMyActor::BeginPlay()
@@ -121,9 +122,12 @@ void AMyActor::ShutdownFunction()
         sound-&gt;release();
     }
 }
-</pre></div></div>
+</pre></div>
 
-<p class="manual-footer">Unreal Integration 2.02.24 (2024-09-23). &copy; 2024 Firelight Technologies Pty Ltd.</p>
+<h2 id="cannot-find-events-or-buses-with-strings"><a href="#cannot-find-events-or-buses-with-strings">9.10 Cannot Find Events or Buses with Strings</a></h2>
+<p>This usually happens because the strings bank file has not been loaded. The strings bank is denoted with the file type <code>.strings.bank</code>, and includes all the metadata required to look up events, buses, snapshots, and VCAs by their paths during runtime. In the event that a path lookup is performed while the strings bank isn't loaded, the error <a href="https://fmod.com/docs/2.03/api/core-api-common.html#fmod_err_event_notfound">FMOD_ERR_EVENT_NOTFOUND</a> will occur, which will either be logged to the Unreal Console, or directly returned from the Studio API function being called.</p></div>
+
+<p class="manual-footer">Unreal Integration 2.03.06 (2025-02-04). &copy; 2025 Firelight Technologies Pty Ltd.</p>
 </body>
 </html>
 

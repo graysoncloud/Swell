@@ -1,10 +1,11 @@
-// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2023.
+// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2025.
 
 #include "FMODSettings.h"
 #include "Misc/Paths.h"
 
 #if WITH_EDITOR
 #include "Settings/ProjectPackagingSettings.h"
+#include <ObjectTools.h>
 #endif
 
 #ifdef FMOD_PLATFORM_HEADER
@@ -43,7 +44,6 @@ UFMODSettings::UFMODSettings(const FObjectInitializer &ObjectInitializer)
     , bEnableEditorLiveUpdate(false)
     , OutputFormat(EFMODSpeakerMode::Surround_5_1)
     , OutputType(EFMODOutput::TYPE_AUTODETECT)
-    , bVol0Virtual(true)
     , Vol0VirtualLevel(0.001f)
     , SampleRate(0)
     , bMatchHardwareSampleRate(true)
@@ -62,6 +62,7 @@ UFMODSettings::UFMODSettings(const FObjectInitializer &ObjectInitializer)
     , ContentBrowserPrefix(TEXT("/Game/FMOD/"))
     , MasterBankName(TEXT("Master"))
     , LoggingLevel(LEVEL_WARNING)
+    , bFMODAudioLinkEnabled(false)
 {
     BankOutputDirectory.Path = TEXT("FMOD");
 }
@@ -186,6 +187,56 @@ UFMODSettings::EProblem UFMODSettings::Check() const
     }
 
     return Okay;
+}
+
+void UFMODSettings::PostEditChangeProperty(FPropertyChangedEvent& e)
+{
+    FName PropertyName = (e.Property != NULL) ? e.Property->GetFName() : NAME_None;
+    // Validate ContentBrowserPrefix, as Unreal can crash if the prefix is improperly configured 
+    if (PropertyName == GET_MEMBER_NAME_CHECKED(UFMODSettings, ContentBrowserPrefix))
+    {
+        FStrProperty* prop = CastField<FStrProperty>(e.Property);
+        void* propertyAddress = e.Property->ContainerPtrToValuePtr<void>(this);
+        FString contentBrowserPrefix = prop->GetPropertyValue(propertyAddress);
+
+        // Check for empty prefix
+        if (contentBrowserPrefix.IsEmpty()) {
+            contentBrowserPrefix = "/";
+        }
+        else {
+
+            // FName's max length is 1023, but FMOD needs to append additional directories
+            // 512 is an arbitary length that should cover most prefix lengths
+            const int ContentBrowserPrefixMaxLength = 512;
+
+            // Ensure that length doesn't exceed max prefix length
+            if (contentBrowserPrefix.Len() > ContentBrowserPrefixMaxLength) {
+                contentBrowserPrefix.LeftChopInline(ContentBrowserPrefixMaxLength);
+            }
+
+            // Remove invalid long package characters
+            contentBrowserPrefix = ObjectTools::SanitizeInvalidChars(contentBrowserPrefix, INVALID_LONGPACKAGE_CHARACTERS);
+
+            // Remove double slashes
+            int32 index = contentBrowserPrefix.Find(FString("//"));
+            while (index != INDEX_NONE) {
+                contentBrowserPrefix.RemoveAt(index);
+                index = contentBrowserPrefix.Find(FString("//"));
+            }
+
+            // Check for starting and ending with slash
+            if (!contentBrowserPrefix.StartsWith("/")) {
+                contentBrowserPrefix = "/" + contentBrowserPrefix;
+            }
+            if (!contentBrowserPrefix.EndsWith("/")) {
+                contentBrowserPrefix += "/";
+            }
+        }
+
+        prop->SetPropertyValue(propertyAddress, contentBrowserPrefix);
+
+    }
+    Super::PostEditChangeProperty(e);
 }
 #endif // WITH_EDITOR
 

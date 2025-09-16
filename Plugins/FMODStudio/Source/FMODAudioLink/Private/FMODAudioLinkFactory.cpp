@@ -1,4 +1,4 @@
-// Copyright (c), Firelight Technologies Pty, Ltd. 2024-2024.
+// Copyright (c), Firelight Technologies Pty, Ltd. 2025-2025.
 
 #include "FMODAudioLinkFactory.h"
 #include "FMODAudioLinkSynchronizer.h"
@@ -10,6 +10,7 @@
 
 #include "Async/Async.h"
 #include "Components/AudioComponent.h"
+#include "Engine/World.h"
 #include "Sound/SoundSubmix.h"
 #include "Templates/SharedPointer.h"
 #include "AudioDevice.h"

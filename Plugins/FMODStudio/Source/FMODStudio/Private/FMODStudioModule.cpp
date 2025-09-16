@@ -1,4 +1,4 @@
-// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2023.
+// Copyright (c), Firelight Technologies Pty, Ltd. 2012-2025.
 
 #include "FMODStudioModule.h"
 #include "FMODSettings.h"
@@ -10,6 +10,11 @@
 #include "FMODEvent.h"
 #include "FMODListener.h"
 #include "FMODSnapshotReverb.h"
+
+#include "FMODAudioLinkModule.h"
+#if WITH_EDITOR
+#include "FMODAudioLinkEditorModule.h"
+#endif
 
 #include "Async/Async.h"
 #include "Interfaces/IPluginManager.h"
@@ -57,15 +62,15 @@ const TCHAR *FMODSystemContextNames[EFMODSystemContext::Max] = {
     TEXT("Auditioning"), TEXT("Runtime"), TEXT("Editor"),
 };
 
-void *F_CALLBACK FMODMemoryAlloc(unsigned int size, FMOD_MEMORY_TYPE type, const char *sourcestr)
+void *F_CALL FMODMemoryAlloc(unsigned int size, FMOD_MEMORY_TYPE type, const char *sourcestr)
 {
     return FMemory::Malloc(size);
 }
-void *F_CALLBACK FMODMemoryRealloc(void *ptr, unsigned int size, FMOD_MEMORY_TYPE type, const char *sourcestr)
+void *F_CALL FMODMemoryRealloc(void *ptr, unsigned int size, FMOD_MEMORY_TYPE type, const char *sourcestr)
 {
     return FMemory::Realloc(ptr, size);
 }
-void F_CALLBACK FMODMemoryFree(void *ptr, FMOD_MEMORY_TYPE type, const char *sourcestr)
+void F_CALL FMODMemoryFree(void *ptr, FMOD_MEMORY_TYPE type, const char *sourcestr)
 {
     FMemory::Free(ptr);
 }
@@ -149,6 +154,10 @@ public:
 
 class FFMODStudioModule : public IFMODStudioModule
 {
+    TUniquePtr<FFMODAudioLinkModule> FMODAudioLinkModule;
+#if WITH_EDITOR
+    TUniquePtr<FFMODAudioLinkEditorModule> FMODAudioLinkEditorModule;
+#endif
 public:
     /** IModuleInterface implementation */
     FFMODStudioModule()
@@ -178,10 +187,6 @@ public:
 
     void HandleApplicationHasReactivated()
     {
-#if PLATFORM_IOS || PLATFORM_TVOS
-        ActivateAudioSession();
-#endif
-
         AsyncTask(ENamedThreads::GameThread, [&]() { SetSystemPaused(false); });
     }
 
@@ -197,7 +202,12 @@ public:
     void UnloadBanks(EFMODSystemContext::Type Type);
 
 #if WITH_EDITOR
+    FSimpleMulticastDelegate PreEndPIEDelegate;
+    FSimpleMulticastDelegate &PreEndPIEEvent() override { return PreEndPIEDelegate; };
+    virtual void PreEndPIE() override;
     void ReloadBanks();
+    void LoadEditorBanks();
+    void UnloadEditorBanks();
 #endif
 
     void CreateStudioSystem(EFMODSystemContext::Type Type);
@@ -219,8 +229,6 @@ public:
     virtual const FFMODListener &GetNearestListener(const FVector &Location) override;
 
     virtual bool HasListenerMoved() override;
-
-    virtual void RefreshSettings();
 
     virtual void SetSystemPaused(bool paused) override;
 
@@ -261,7 +269,6 @@ public:
 
 #if PLATFORM_IOS || PLATFORM_TVOS
     void InitializeAudioSession();
-    void ActivateAudioSession();
 #endif
 
     /** The studio system handle. */
@@ -499,16 +506,28 @@ void FFMODStudioModule::StartupModule()
 
         AcquireFMODFileSystem();
 
-        RefreshSettings();
-
         if (GIsEditor)
         {
+            AssetTable.Load();
+            AssetTable.SetLocale(GetDefaultLocale());
             CreateStudioSystem(EFMODSystemContext::Auditioning);
             CreateStudioSystem(EFMODSystemContext::Editor);
         }
         else
         {
             SetInPIE(true, false);
+        }
+
+        // Load AudioLink module
+        bool bFMODAudioLinkEnabled = Settings.bFMODAudioLinkEnabled;
+        if (bFMODAudioLinkEnabled)
+        {
+            UE_LOG(LogFMOD, Log, TEXT("FFMODAudioLinkModule startup"));
+            FMODAudioLinkModule = MakeUnique<FFMODAudioLinkModule>();
+#if WITH_EDITOR
+            UE_LOG(LogFMOD, Log, TEXT("FFMODAudioLinkEditorModule startup"));
+            FMODAudioLinkEditorModule = MakeUnique<FFMODAudioLinkEditorModule>();
+#endif
         }
     }
 
@@ -681,11 +700,7 @@ void FFMODStudioModule::CreateStudioSystem(EFMODSystemContext::Type Type)
 
     FMOD_ADVANCEDSETTINGS advSettings = { 0 };
     advSettings.cbSize = sizeof(FMOD_ADVANCEDSETTINGS);
-    if (Settings.bVol0Virtual)
-    {
-        advSettings.vol0virtualvol = Settings.Vol0VirtualLevel;
-        InitFlags |= FMOD_INIT_VOL0_BECOMES_VIRTUAL;
-    }
+    advSettings.vol0virtualvol = Settings.Vol0VirtualLevel;
 
     if (!Settings.SetCodecs(advSettings))
     {
@@ -778,10 +793,13 @@ void FFMODStudioModule::DestroyStudioSystem(EFMODSystemContext::Type Type)
         ClockSinks[Type].Reset();
     }
 
-    UnloadBanks(Type);
-
     if (StudioSystem[Type])
     {
+        FMOD::Studio::Bus* mBus;
+        StudioSystem[Type]->getBus("bus:/", &mBus);
+        mBus->setMute(true);
+        StudioSystem[Type]->flushCommands();
+
         verifyfmod(StudioSystem[Type]->release());
         StudioSystem[Type] = nullptr;
     }
@@ -797,7 +815,7 @@ void FFMODStudioModule::UnloadBanks(EFMODSystemContext::Type Type)
         {
             TArray<FMOD::Studio::Bank*> bankArray;
 
-            bankArray.SetNumUninitialized(bankCount, false);
+            bankArray.SetNumUninitialized(bankCount, EAllowShrinking::No);
             verifyfmod(StudioSystem[Type]->getBankList(bankArray.GetData(), bankCount, &bankCount));
 
             for (int i = 0; i < bankCount; i++)
@@ -1099,15 +1117,6 @@ void FFMODStudioModule::FinishSetListenerPosition(int NumListeners)
     }
 }
 
-void FFMODStudioModule::RefreshSettings()
-{
-    AssetTable.Load();
-    if (AssetTable.GetLocale().IsEmpty())
-    {
-        AssetTable.SetLocale(GetDefaultLocale());
-    }
-}
-
 void FFMODStudioModule::SetInPIE(bool bInPIE, bool simulating)
 {
     bIsInPIE = bInPIE;
@@ -1133,6 +1142,9 @@ void FFMODStudioModule::SetInPIE(bool bInPIE, bool simulating)
 
         // TODO: Stop sounds for the Editor system? What should happen if the user previews a sequence with transport
         // controls then starts a PIE session? What does happen?
+
+        AssetTable.Load();
+        AssetTable.SetLocale(GetDefaultLocale());
 
         ListenerCount = 1;
         CreateStudioSystem(EFMODSystemContext::Runtime);
@@ -1210,6 +1222,17 @@ void FFMODStudioModule::SetSystemPaused(bool paused)
     }
 }
 
+#if WITH_EDITOR
+void FFMODStudioModule::PreEndPIE()
+{
+    UE_LOG(LogFMOD, Verbose, TEXT("PreEndPIE"));
+    if (PreEndPIEDelegate.IsBound())
+    {
+        PreEndPIEDelegate.Broadcast();
+    }
+}
+#endif
+
 void FFMODStudioModule::ShutdownModule()
 {
     UE_LOG(LogFMOD, Verbose, TEXT("FFMODStudioModule shutdown"));
@@ -1217,6 +1240,17 @@ void FFMODStudioModule::ShutdownModule()
     DestroyStudioSystem(EFMODSystemContext::Auditioning);
     DestroyStudioSystem(EFMODSystemContext::Runtime);
     DestroyStudioSystem(EFMODSystemContext::Editor);
+
+    if (FMODAudioLinkModule)
+    {
+        FMODAudioLinkModule.Reset();
+    }
+#if WITH_EDITOR
+    if (FMODAudioLinkEditorModule)
+    {
+        FMODAudioLinkEditorModule.Reset();
+    }
+#endif
 
     if (StudioLibHandle && LowLevelLibHandle)
     {
@@ -1466,10 +1500,20 @@ void FFMODStudioModule::ReloadBanks()
     UnloadBanks(EFMODSystemContext::Auditioning);
     DestroyStudioSystem(EFMODSystemContext::Editor);
 
-    RefreshSettings();
+    AssetTable.Load();
 
     LoadBanks(EFMODSystemContext::Auditioning);
     CreateStudioSystem(EFMODSystemContext::Editor);
+}
+
+void FFMODStudioModule::LoadEditorBanks()
+{
+    LoadBanks(EFMODSystemContext::Editor);
+}
+
+void FFMODStudioModule::UnloadEditorBanks()
+{
+    UnloadBanks(EFMODSystemContext::Editor);
 }
 #endif
 
@@ -1528,56 +1572,119 @@ void FFMODStudioModule::StopAuditioningInstance()
 }
 
 #if PLATFORM_IOS || PLATFORM_TVOS
+static bool gIsSuspended = false;
+static bool gNeedsReset = false;
+
 void FFMODStudioModule::InitializeAudioSession()
 {
     [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionInterruptionNotification object:nil queue:nil usingBlock:^(NSNotification *notification)
     {
-        switch ([[notification.userInfo valueForKey:AVAudioSessionInterruptionTypeKey] unsignedIntegerValue])
+        AVAudioSessionInterruptionType type = (AVAudioSessionInterruptionType)[[notification.userInfo valueForKey:AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+        if (type == AVAudioSessionInterruptionTypeBegan)
         {
-            case AVAudioSessionInterruptionTypeBegan:
+            UE_LOG(LogFMOD, Log, TEXT("Interruption Began"));
+            // Ignore deprecated warnings regarding AVAudioSessionInterruptionReasonAppWasSuspended and
+            // AVAudioSessionInterruptionWasSuspendedKey, we protect usage for the versions where they are available
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            
+            // If the audio session was deactivated while the app was in the background, the app receives the
+            // notification when relaunched. Identify this reason for interruption and ignore it.
+            if (@available(iOS 16.0, tvOS 14.5, *))
             {
-                if (@available(iOS 10.3, *))
+                // Delayed suspend-in-background notifications no longer exist, this must be a real interruption
+            }
+            #if !PLATFORM_TVOS // tvOS never supported "AVAudioSessionInterruptionReasonAppWasSuspended"
+            else if (@available(iOS 14.5, *))
+            {
+                if ([[notification.userInfo valueForKey:AVAudioSessionInterruptionReasonKey] intValue] == AVAudioSessionInterruptionReasonAppWasSuspended)
                 {
-                    if ([[notification.userInfo valueForKey:AVAudioSessionInterruptionWasSuspendedKey] boolValue])
-                    {
-                        // If the system suspended the app process and deactivated the audio session then we get a delayed
-                        // interruption notification when the app is re-activated. Just ignore that here.
-                        return;
-                    }
+                    return; // Ignore delayed suspend-in-background notification
                 }
-                SetSystemPaused(true);
-                break;
             }
-            case AVAudioSessionInterruptionTypeEnded:
+            #endif
+            else
             {
-                ActivateAudioSession();
-                SetSystemPaused(false);
-                break;
+                if ([[notification.userInfo valueForKey:AVAudioSessionInterruptionWasSuspendedKey] boolValue])
+                {
+                    return; // Ignore delayed suspend-in-background notification
+                }
             }
+            
+            SetSystemPaused(true);
+            gIsSuspended = true;
+            #pragma clang diagnostic pop
+        }
+        else if (type == AVAudioSessionInterruptionTypeEnded)
+        {
+            UE_LOG(LogFMOD, Log, TEXT("Interruption Ended"));
+            NSError *ActiveError = nil;
+            if (![[AVAudioSession sharedInstance] setActive:TRUE error:&ActiveError])
+            {
+                // Interruption like Siri can prevent session activation, wait for did-become-active notification
+                UE_LOG(LogFMOD, Error, TEXT("Failed to set audio session to active = %d [Error = %s]"), TRUE, *FString([ActiveError description]));
+                return;
+            }
+            
+            SetSystemPaused(false);
+            gIsSuspended = false;
         }
     }];
 
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:^(NSNotification *notification)
     {
-    #if PLATFORM_TVOS
-        SetSystemPaused(true);
-    #endif
-        ActivateAudioSession();
-        SetSystemPaused(false);
+        // If the Media Services were reset while we were in the background we need to reset
+        // To reset we need to suspend so that we can resume.
+        if (gNeedsReset)
+        {
+            SetSystemPaused(true);
+            gIsSuspended = true;
+        }
+
+        NSError *ActiveError = nil;
+        if (![[AVAudioSession sharedInstance] setActive:TRUE error:&ActiveError])
+        {
+            if ([ActiveError code] == AVAudioSessionErrorCodeCannotStartPlaying)
+            {
+                // Interruption like Screen Time can prevent session activation, but will not trigger an interruption-ended notification.
+                // There is no other callback or trigger to hook into after this point, we are not in the background and there is no other audio playing.
+                // Our only option is to have a sleep loop until the Audio Session can be activated again.
+                while (![[AVAudioSession sharedInstance] setActive:TRUE error:nil])
+                {
+                    FPlatformProcess::Sleep(0.02f);
+                }
+            }
+            else
+            {
+                // Interruption like Siri can prevent session activation, wait for interruption-ended notification.
+                UE_LOG(LogFMOD, Warning, TEXT("UIApplicationDidBecomeActiveNotification: Failed to set audio session to active = %d [Error = %s]"), TRUE, *FString([ActiveError description]));
+                return;
+            }
+        }
+
+        // It's possible the system missed sending us an interruption end, so recover here
+        if (gIsSuspended)
+        {
+            SetSystemPaused(false);
+            gNeedsReset = false;
+            gIsSuspended = false;
+        }
     }];
-
-    ActivateAudioSession();
-}
-
-void FFMODStudioModule::ActivateAudioSession()
-{
-    NSError* ActiveError = nil;
-    [[AVAudioSession sharedInstance] setActive:TRUE error:&ActiveError];
-
-    if (ActiveError)
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionMediaServicesWereResetNotification object:nil queue:nil usingBlock:^(NSNotification *notification)
     {
-        UE_LOG(LogFMOD, Error, TEXT("Failed to set audio session to active = %d [Error = %s]"), TRUE, *FString([ActiveError description]));
-    }
+        if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground || gIsSuspended)
+        {
+            // Received the reset notification while in the background, need to reset the AudioUnit when we come back to foreground.
+            gNeedsReset = true;
+        }
+        else
+        {
+            // In the foregound but something chopped the media services, need to do a reset.
+            SetSystemPaused(true);
+            SetSystemPaused(false);
+        }
+    }];
 }
 #endif
 
